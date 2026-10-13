@@ -1,0 +1,188 @@
+---
+title: "Mixed Methods 101: Better Questions, Better Answers"
+description: "A short interactive module for Beacon Point EMA analysts on survey design, interview questions and combining ratings with comments."
+output:
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+---
+
+```{r setup, include = FALSE}
+# This project contains synthetic data and analysis created for demonstration
+# purposes only.
+#
+# Run locally:  learnr::run_tutorial("mixed-methods-101", package = NULL)
+#   or open this file in RStudio and click "Run Document".
+# Publish to Posit Connect like any other R Markdown document. This folder is
+# self-contained, so it can be published on its own.
+
+library(learnr)
+library(dplyr)
+library(stringr)
+
+tutorial_options(exercise.timelimit = 30)
+
+# A small, hand-written synthetic sample of post-deployment survey responses
+responses <- tibble::tribble(
+  ~region,            ~role,                  ~first_deployment, ~score_overall, ~comment,
+  "Gulf Coast",       "Field Staff",          "Yes",             2, "Lodging was an hour from the recovery center and the commute ate into every shift.",
+  "Gulf Coast",       "Logistics Specialist", "No",              2, "The staging area ran out of supplies and nobody knew when the next delivery would arrive.",
+  "Gulf Coast",       "Supervisor",           "No",              4, "Daily briefings were clear and priorities stayed consistent all week.",
+  "Pacific Rim",      "Reservist",            "Yes",             2, "I arrived without knowing who my supervisor was or where to report.",
+  "Pacific Rim",      "Field Staff",          "No",              3, "Connectivity was poor and the tablets lost survey data when the signal dropped.",
+  "Pacific Rim",      "Liaison Officer",      "No",              4, "Tribal and local partners shared referral lists daily, which helped survivors.",
+  "Central Plains",   "Field Staff",          "Yes",             3, "Just-in-time training was a slide deck with no hands-on practice.",
+  "Central Plains",   "Supervisor",           "No",              5, "The new field kits worked from day one and the help desk answered quickly.",
+  "Eastern Seaboard", "Reservist",            "Yes",             3, "My mentor made the first week manageable. Every new deployer should get one.",
+  "Eastern Seaboard", "Logistics Specialist", "No",              4, "Hotel rooms were booked before we arrived and vehicles were ready.",
+  "Mountain West",    "Field Staff",          "No",              4, "Shift change briefings included a written handoff, so nothing was repeated.",
+  "Mountain West",    "Reservist",            "Yes",             2, "Lodging near the fire zone was full and staff slept in a shelter for a week."
+)
+```
+
+## Welcome
+
+> **This project contains synthetic data and analysis created for demonstration purposes only.**
+> Beacon Point Emergency Management Agency is fictional.
+
+This 15-minute module covers three skills the Continuous Improvement Office uses every week:
+
+1. Writing survey questions that measure one thing, fairly
+2. Writing interview questions that open up a conversation
+3. Combining ratings (the *what*) with comments (the *why*)
+
+You can answer the questions in any order, and the code boxes run real R.
+
+## Survey questions
+
+### One idea per question
+
+```{r q-double, echo = FALSE}
+question(
+  "Which survey question is *double-barreled* (asks about two things at once)?",
+  answer("How would you rate the onboarding you received?"),
+  answer("How satisfied were you with your lodging and your vehicle?", correct = TRUE,
+         message = "Lodging and vehicles are separate experiences. A low score can't tell you which one to fix. Split it into two questions."),
+  answer("How many weeks were you deployed?"),
+  allow_retry = TRUE
+)
+```
+
+### Avoid leading wording
+
+```{r q-leading, echo = FALSE}
+question(
+  "Which version is the most neutral?",
+  answer("How helpful were the excellent new field kits?",
+         message = "\"Excellent\" tells the respondent what to think."),
+  answer("Don't you agree the field kits improved your work?",
+         message = "\"Don't you agree\" pushes toward yes."),
+  answer("How would you rate the field kits you were issued?", correct = TRUE),
+  allow_retry = TRUE
+)
+```
+
+### Balanced scales
+
+```{r q-scale, echo = FALSE}
+question(
+  "Why does the post-deployment survey use a 1 to 5 scale from *Very poor* to *Excellent*?",
+  answer("It has as many negative options as positive ones, with a neutral midpoint", correct = TRUE),
+  answer("Five-point scales are required by law"),
+  answer("It makes every score look better"),
+  allow_retry = TRUE
+)
+```
+
+## Interview questions
+
+```{r q-open, echo = FALSE}
+question(
+  "You're interviewing a reservist after a hurricane deployment. Which question invites the richest answer?",
+  answer("Was onboarding good?",
+         message = "A yes/no question usually gets a one-word answer."),
+  answer("Walk me through your first day after you arrived.", correct = TRUE,
+         message = "Asking someone to narrate a specific moment gets concrete detail you can code later."),
+  answer("Would you say onboarding was bad because of the training?",
+         message = "This leads the person and assumes a cause."),
+  allow_retry = TRUE
+)
+```
+
+```{r q-followup, echo = FALSE}
+question(
+  "They say \"the briefings were confusing.\" What's the best follow-up?",
+  answer("Can you tell me about a time a briefing was confusing?", correct = TRUE),
+  answer("So communication was poor overall?",
+         message = "That summarizes for them and may not be what they meant."),
+  answer("Okay, next question.",
+         message = "That misses the chance to find out *why*."),
+  allow_retry = TRUE
+)
+```
+
+## Ratings: the "what"
+
+The `responses` table holds 12 synthetic survey responses. Find the average overall rating for each region, lowest first.
+
+```{r ratings, exercise = TRUE}
+responses |>
+  group_by(region) |>
+  summarise(avg_overall = ___) |>
+  arrange(avg_overall)
+```
+
+```{r ratings-hint}
+# Use mean() on the score_overall column
+```
+
+```{r ratings-solution}
+responses |>
+  group_by(region) |>
+  summarise(avg_overall = mean(score_overall)) |>
+  arrange(avg_overall)
+```
+
+Now compare first-time deployers with experienced staff. Change the grouping column.
+
+```{r first-time, exercise = TRUE}
+responses |>
+  group_by(region) |>
+  summarise(avg_overall = mean(score_overall), n = n())
+```
+
+```{r first-time-solution}
+responses |>
+  group_by(first_deployment) |>
+  summarise(avg_overall = mean(score_overall), n = n())
+```
+
+## Comments: the "why"
+
+Ratings tell you *where* to look. Comments tell you *why*. Find every comment that mentions lodging. Try changing the word to `"briefing"` or `"mentor"`.
+
+```{r comments, exercise = TRUE}
+responses |>
+  filter(str_detect(str_to_lower(comment), "lodging")) |>
+  select(region, score_overall, comment)
+```
+
+```{r q-mixed, echo = FALSE}
+question(
+  "The Gulf Coast has the lowest ratings, and its comments mention lodging and supplies. What's a good next step?",
+  answer("Report that the Gulf Coast is bad", message = "That's the *what* without the *why*, and a small sample."),
+  answer("Check whether the lodging theme holds in the full survey and the AARs, then talk to Gulf Coast staff", correct = TRUE,
+         message = "Mixed methods: confirm the pattern in more data, then go deeper with interviews."),
+  answer("Ignore the comments and rely on the scores"),
+  allow_retry = TRUE
+)
+```
+
+## Wrap-up
+
+- Ask about **one thing per question**, in **neutral** words, on a **balanced** scale.
+- In interviews, ask people to **describe specific moments**, then follow up on *why*.
+- Use ratings to find *where* to look and comments to learn *why*. Then confirm with more data.
+
+*This project contains synthetic data and analysis created for demonstration purposes only.*

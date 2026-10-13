@@ -1,0 +1,244 @@
+---
+title: "Weekly Deployment Experience Brief"
+subtitle: "Beacon Point Emergency Management Agency | Continuous Improvement Office"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+# Parameters become drop-downs and sliders in Posit Connect's "Input" panel.
+# Save each combination as a variant (e.g. one per region), and each variant
+# gets its own schedule and its own email subscribers.
+params:
+  region:
+    label: "Region"
+    value: "All regions"
+    input: select
+    choices: ["All regions", "Central Plains", "Eastern Seaboard", "Gulf Coast",
+              "Mountain West", "Northern Coast", "Pacific Rim"]
+  period_days:
+    label: "Days covered by this brief"
+    value: 28
+    input: slider
+    min: 7
+    max: 91
+    step: 7
+  make_pdf:
+    label: "Also create a PDF copy and attach it to the email"
+    value: true
+output:
+  html_document:
+    theme:
+      version: 5
+      brand: "_brand.yml"
+  pdf_document:
+    toc: false
+---
+
+```{r setup, include = FALSE}
+# ---------------------------------------------------------------------------
+# This project contains synthetic data and analysis created for demonstration
+# purposes only.
+#
+# Render locally:
+#   rmarkdown::render("ci-weekly-brief.Rmd", params = list(region = "Gulf Coast"))
+#
+# On Posit Connect: publish, open the Input panel to pick a region, then use
+# Schedule (e.g. every Monday 7:00 AM) and Email ("send email after update").
+# ---------------------------------------------------------------------------
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = 8, fig.height = 3.6, dpi = 120)
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(knitr)
+
+source("R/ci_data.R")
+source("ml/model_utils.R")
+
+ci <- load_ci_data()
+if (!file.exists(MODEL_PATH())) source("ml/train_model.R", local = new.env())
+model <- readRDS(MODEL_PATH())
+
+# To read from Databricks instead, see the commented lines in R/ci_data.R.
+
+# The brief covers the most recent `period_days` of data and compares it with
+# the 12 months before that.
+period_end <- max(ci$responses$submitted_at)
+period_start <- period_end - params$period_days + 1
+baseline_start <- period_start - 365
+
+in_region <- function(df) {
+  if (params$region == "All regions") df else filter(df, region == params$region)
+}
+
+responses <- in_region(ci$responses)
+current <- filter(responses, submitted_at >= period_start)
+baseline <- filter(responses, submitted_at >= baseline_start, submitted_at < period_start)
+
+pct_redeploy <- function(df) mean(df$would_redeploy == "Yes", na.rm = TRUE)
+fmt_change <- function(x, digits = 0.01) paste0(if_else(x >= 0, "+", ""), number(x, digits))
+```
+
+**`r params$region`** | `r format(period_start, "%B %d")` to `r format(period_end, "%B %d, %Y")`
+
+> **This project contains synthetic data and analysis created for demonstration purposes only.**
+> Beacon Point Emergency Management Agency is fictional.
+
+```{r no-data, results = "asis"}
+if (nrow(current) == 0) {
+  cat("No survey responses were received in this period. No email is sent when there is nothing new.\n")
+}
+```
+
+```{r body, eval = nrow(current) > 0, results = "asis"}
+cat(sprintf(
+  "## At a glance\n\n**%s** staff responded in this period. They rated their overall deployment experience **%s** out of 5 (%s versus the previous 12 months), and **%s** said they would deploy again (previous 12 months: %s).\n\n",
+  comma(nrow(current)),
+  number(mean(current$score_overall), 0.01),
+  fmt_change(mean(current$score_overall) - mean(baseline$score_overall)),
+  percent(pct_redeploy(current), 1),
+  percent(pct_redeploy(baseline), 1)
+))
+```
+
+```{r scores, eval = nrow(current) > 0}
+score_table <- bind_rows(
+  current |> summarise(across(starts_with("score_"), mean)) |> mutate(period = "now"),
+  baseline |> summarise(across(starts_with("score_"), mean)) |> mutate(period = "before")
+) |>
+  pivot_longer(-period, names_to = "dimension", values_to = "avg") |>
+  pivot_wider(names_from = period, values_from = avg) |>
+  mutate(change = now - before) |>
+  arrange(now)
+
+score_table |>
+  transmute(
+    Area = SCORE_LABELS[dimension],
+    `This period` = number(now, 0.01),
+    `Previous 12 months` = number(before, 0.01),
+    Change = fmt_change(change)
+  ) |>
+  kable(align = "lrrr", caption = "Average rating by area (1 = very poor, 5 = excellent). Lowest-rated area first.")
+```
+
+```{r trend, eval = nrow(current) > 0}
+monthly <- responses |>
+  filter(submitted_at >= baseline_start) |>
+  mutate(month = as.Date(format(submitted_at, "%Y-%m-01"))) |>
+  group_by(month) |>
+  summarise(avg = mean(score_overall), n = n())
+
+ggplot(monthly, aes(month, avg)) +
+  geom_line(linewidth = 1, color = ci_series_colors(1)) +
+  geom_point(size = 2.6, color = "white") +
+  geom_point(size = 1.8, color = ci_series_colors(1)) +
+  scale_y_continuous(limits = c(1, 5), breaks = 1:5) +
+  # Fixed 13-month window, so months without deployments show as gaps
+  scale_x_date(
+    limits = c(as.Date(format(baseline_start, "%Y-%m-01")), period_end),
+    date_labels = "%b %Y", date_breaks = "2 months"
+  ) +
+  labs(
+    title = "Overall deployment experience, last 13 months",
+    subtitle = "Average overall rating by month. Gaps are months with no deployments.",
+    x = NULL, y = NULL, caption = SYNTHETIC_CAPTION
+  ) +
+  theme_ci(12)
+```
+
+```{r by-region-heading, eval = nrow(current) > 0 && params$region == "All regions", results = "asis"}
+cat("## By region\n\n")
+```
+
+```{r by-region, eval = nrow(current) > 0 && params$region == "All regions"}
+# Each region's weakest area this period, so regional leads know where to look
+current |>
+  pivot_longer(starts_with("score_") & !score_overall, names_to = "dimension", values_to = "score") |>
+  group_by(region, dimension) |>
+  summarise(avg = mean(score), .groups = "drop_last") |>
+  slice_min(avg, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  left_join(
+    current |> group_by(region) |> summarise(n = n(), overall = mean(score_overall)),
+    by = "region"
+  ) |>
+  arrange(overall) |>
+  transmute(
+    Region = region, Responses = n, Overall = number(overall, 0.01),
+    `Weakest area` = SCORE_LABELS[dimension], `Its rating` = number(avg, 0.01)
+  ) |>
+  kable(align = "lrrlr", caption = "Regions ordered from lowest to highest overall rating this period.")
+```
+
+```{r comments-heading, eval = nrow(current) > 0, results = "asis"}
+cat("## What people said\n\n")
+```
+
+```{r comments, eval = nrow(current) > 0}
+# Themes come from the saved topic model (ml/train_model.R), which uses a fixed
+# seed, so this table is identical every time it runs on the same data.
+period_comments <- current |>
+  filter(!is.na(comment)) |>
+  left_join(select(model$doc_topics, doc_id, topic_label), by = c("response_id" = "doc_id"))
+
+period_comments |>
+  count(Theme = coalesce(topic_label, "New comment (not yet classified)"), name = "Comments") |>
+  arrange(desc(Comments)) |>
+  kable(caption = "Themes in this period's written comments.")
+
+lowest <- period_comments |>
+  arrange(score_overall, desc(submitted_at)) |>
+  head(5) |>
+  transmute(`Overall rating` = score_overall, Date = format(submitted_at, "%b %d"), Region = region, Comment = comment) |>
+  # A single-region brief doesn't need a region column
+  select(-any_of(if (params$region != "All regions") "Region"))
+
+kable(
+  lowest,
+  align = if_else(names(lowest) == "Comment", "l", "c"),
+  caption = "Comments from the five lowest-rated responses in this period."
+)
+```
+
+---
+
+*This project contains synthetic data and analysis created for demonstration purposes only. Generated `r format(Sys.time(), "%Y-%m-%d %H:%M %Z")` from `ci-weekly-brief.Rmd`.*
+
+```{r connect-email, include = FALSE}
+# --- PDF copy and email settings for Posit Connect ---------------------------
+# Connect renders the HTML version on schedule. This chunk renders the same
+# report as a PDF in a separate R session and tells Connect to attach it to
+# the email. The rsc_* fields are ignored when rendering outside Connect.
+pdf_file <- "ci-weekly-brief.pdf"
+
+if (knitr::is_html_output() && isTRUE(params$make_pdf) && nrow(current) > 0) {
+  report_path <- knitr::current_input(dir = TRUE)
+  run_params <- params
+  pdf_ok <- tryCatch({
+    callr::r(
+      \(input, params, out) rmarkdown::render(
+        input, output_format = "pdf_document", output_file = out,
+        params = modifyList(params, list(make_pdf = FALSE)),
+        envir = new.env(), quiet = TRUE
+      ),
+      args = list(input = report_path, params = run_params, out = pdf_file)
+    )
+    TRUE
+  }, error = function(e) {
+    message("PDF copy skipped (is a LaTeX distribution such as TinyTeX installed?): ", conditionMessage(e))
+    FALSE
+  })
+} else {
+  pdf_ok <- FALSE
+}
+
+rmarkdown::output_metadata$set(
+  rsc_email_subject = sprintf(
+    "Deployment Experience Brief | %s | week ending %s",
+    params$region, format(period_end, "%b %d, %Y")
+  ),
+  # Only email subscribers when there is something new to report
+  rsc_email_suppress_scheduled = nrow(current) == 0,
+  rsc_output_files = if (pdf_ok) list(pdf_file) else list(),
+  rsc_email_attachments = if (pdf_ok) list(pdf_file) else list()
+)
+```

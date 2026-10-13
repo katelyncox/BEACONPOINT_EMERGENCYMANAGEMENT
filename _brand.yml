@@ -1,0 +1,74 @@
+# Beacon Point Emergency Management Agency is a FICTIONAL organization created
+# for a Posit demonstration. It is not affiliated with any real agency.
+#
+# Swap these values for your own organization's brand and every Shiny app and
+# R Markdown report in this project picks up the change. No colors are set in
+# app or report code.
+
+meta:
+  name:
+    short: Beacon Point EMA
+    full: Beacon Point Emergency Management Agency (fictional demonstration agency)
+
+color:
+  palette:
+    white: "#FFFFFF"
+    black: "#14171C"
+    navy: "#13294B"
+    slate: "#52514E"
+    mist: "#E9EDF2"
+    # blue / orange / aqua / yellow / magenta / violet are the categorical
+    # chart series, in this fixed order. The order passes lightness-band,
+    # chroma-floor, colour-vision-deficiency and normal-vision separation
+    # checks on adjacent pairs. Aqua, yellow and magenta sit below 3:1
+    # contrast on white, so charts using them carry direct labels or a table.
+    blue: "#2A78D6"
+    orange: "#EB6834"
+    aqua: "#1BAF7A"
+    yellow: "#EDA100"
+    magenta: "#E87BA4"
+    violet: "#6250D6"
+    deep-blue: "#1C5CAB"
+    red: "#C93A39"
+    green: "#0B7F0B"
+  foreground: black
+  background: white
+  primary: deep-blue
+  secondary: slate
+  tertiary: mist
+  success: green
+  info: blue
+  warning: yellow
+  danger: red
+  dark: navy
+
+typography:
+  fonts:
+    # Public Sans is the open-source typeface of the U.S. Web Design System
+    - family: Public Sans
+      source: google
+      weight: [400, 600, 700]
+      style: [normal, italic]
+    - family: Roboto Mono
+      source: google
+      weight: [400, 500]
+  base:
+    family: Public Sans
+    size: 16px
+    line-height: 1.5
+  headings:
+    family: Public Sans
+    weight: 700
+    line-height: 1.25
+    color: navy
+  monospace:
+    family: Roboto Mono
+    size: 0.9em
+  link:
+    weight: 600
+
+defaults:
+  shiny:
+    theme:
+      defaults:
+        navbar-bg: $brand-navy

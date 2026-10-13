@@ -1,0 +1,195 @@
+---
+# Beacon Point EMA - Post-Deployment Experience Survey
+# This project contains synthetic data and analysis created for demonstration
+# purposes only.
+#
+# This file is plain Markdown plus R code chunks, the same as an .Rmd file.
+# Each `--- page_id` line starts a new survey page and each sd_question()
+# call adds a question. You do not need to know Quarto to edit it; surveydown
+# uses Quarto behind the scenes to turn this file into a web page.
+
+theme-settings:
+  theme: default
+  barposition: top
+  footer-left: "Beacon Point EMA (fictional) | Built with open-source [surveydown](https://surveydown.org)"
+
+survey-settings:
+  # "local" saves each response to local_data.csv in this folder.
+  # Change to "database" after running sd_db_config() to save to Postgres.
+  mode: local
+  show-previous: true
+  use-cookies: false
+  highlight-unanswered: true
+  capture-metadata: false
+  required:
+    - region
+    - role
+    - score_overall
+
+system-messages:
+  next: Next
+  previous: Back
+  exit: Submit survey
+---
+
+```{r}
+library(surveydown)
+
+# Five-point scale reused for every rating question
+rating_scale <- c(
+  "1 - Very poor" = "1",
+  "2 - Poor" = "2",
+  "3 - Acceptable" = "3",
+  "4 - Good" = "4",
+  "5 - Excellent" = "5"
+)
+```
+
+--- welcome
+
+# Post-Deployment Experience Survey
+
+Thank you for your service on this deployment. This short survey (about 3
+minutes) helps the Continuous Improvement Office find what to fix before the
+next activation. Responses are reviewed in aggregate.
+
+> This project contains synthetic data and analysis created for demonstration
+> purposes only. Beacon Point Emergency Management Agency is fictional.
+
+--- about_you
+
+## Your deployment
+
+```{r}
+sd_question(
+  type = "select",
+  id = "region",
+  label = "Which region were you deployed to?",
+  option = c(
+    "Northern Coast" = "northern_coast",
+    "Eastern Seaboard" = "eastern_seaboard",
+    "Gulf Coast" = "gulf_coast",
+    "Central Plains" = "central_plains",
+    "Mountain West" = "mountain_west",
+    "Pacific Rim" = "pacific_rim"
+  )
+)
+
+sd_question(
+  type = "select",
+  id = "incident_type",
+  label = "What type of incident was it?",
+  option = c(
+    "Hurricane" = "hurricane",
+    "Flood" = "flood",
+    "Wildfire" = "wildfire",
+    "Tornado" = "tornado",
+    "Severe Storm" = "severe_storm",
+    "Winter Storm" = "winter_storm"
+  )
+)
+
+sd_question(
+  type = "mc",
+  id = "role",
+  label = "What was your primary role?",
+  option = c(
+    "Field Staff" = "field_staff",
+    "Supervisor" = "supervisor",
+    "Reservist" = "reservist",
+    "Logistics Specialist" = "logistics_specialist",
+    "Liaison Officer" = "liaison_officer"
+  )
+)
+
+sd_question(
+  type = "mc_buttons",
+  id = "first_deployment",
+  label = "Was this your first deployment?",
+  option = c("Yes" = "yes", "No" = "no")
+)
+
+sd_question(
+  type = "numeric",
+  id = "deployment_weeks",
+  label = "About how many weeks were you deployed?"
+)
+```
+
+--- ratings
+
+## Rate your experience
+
+```{r}
+sd_question(
+  type = "mc_buttons",
+  id = "score_onboarding",
+  label = "Onboarding and just-in-time training",
+  option = rating_scale
+)
+
+sd_question(
+  type = "mc_buttons",
+  id = "score_tools_tech",
+  label = "Tools and technology (laptops, tablets, connectivity)",
+  option = rating_scale
+)
+
+sd_question(
+  type = "mc_buttons",
+  id = "score_communication",
+  label = "Communication and briefings",
+  option = rating_scale
+)
+
+sd_question(
+  type = "mc_buttons",
+  id = "score_logistics",
+  label = "Lodging, vehicles and logistics",
+  option = rating_scale
+)
+
+sd_question(
+  type = "mc_buttons",
+  id = "score_leadership",
+  label = "Leadership and supervisor support",
+  option = rating_scale
+)
+
+sd_question(
+  type = "mc_buttons",
+  id = "score_overall",
+  label = "Overall deployment experience",
+  option = rating_scale
+)
+```
+
+--- wrap_up
+
+## Final thoughts
+
+```{r}
+sd_question(
+  type = "mc_buttons",
+  id = "would_redeploy",
+  label = "Would you volunteer to deploy again?",
+  option = c("Yes" = "yes", "Unsure" = "unsure", "No" = "no")
+)
+
+sd_question(
+  type = "textarea",
+  id = "comment",
+  label = "What is one thing we should keep doing or change before the next deployment?"
+)
+```
+
+--- end
+
+## Thank you
+
+Your response has been recorded. The Continuous Improvement Office reviews
+results weekly and shares what changed as a result.
+
+```{r}
+sd_close("Submit survey")
+```
