@@ -61,7 +61,8 @@ responses <- ci$responses
 incidents <- ci$incidents
 aar <- ci$aar
 
-# To read the same tables from Databricks, uncomment these lines instead:
+# To read from Databricks, set CI_DATA_SOURCE=databricks (see R/ci_data.R),
+# or connect above and uncomment these lines instead:
 # responses <- dplyr::tbl(con, I("sol_eng_demo_nickp.beacon_point_ci.survey_responses")) |> collect()
 # incidents <- dplyr::tbl(con, I("sol_eng_demo_nickp.beacon_point_ci.incidents")) |> collect()
 # aar <- dplyr::tbl(con, I("sol_eng_demo_nickp.beacon_point_ci.aar_observations")) |> collect()

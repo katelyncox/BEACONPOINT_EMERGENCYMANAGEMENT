@@ -58,7 +58,7 @@ ci <- load_ci_data()
 if (!file.exists(MODEL_PATH())) source("ml/train_model.R", local = new.env())
 model <- readRDS(MODEL_PATH())
 
-# To read from Databricks instead, see the commented lines in R/ci_data.R.
+# To read from Databricks instead, set CI_DATA_SOURCE=databricks (see R/ci_data.R).
 
 # The brief covers the most recent `period_days` of data and compares it with
 # the 12 months before that.

@@ -80,8 +80,8 @@ The synthetic data isn't stored in version control. `data/generate_data.R` uses 
 ## Working with Databricks
 
 1. Generate the data, then load it: `cd databricks && uv run upload_to_databricks.py --warehouse-id <id> --profile workbench`
-2. On Posit Workbench with Databricks managed credentials, install the ODBC package (`renv::install("odbc")`) and step through `databricks/databricks_examples.R`.
-3. To switch the dashboard or reports to Databricks, uncomment the Databricks lines in `app.R`, `eda.Rmd` and `R/ci_data.R`.
+2. On Posit Workbench with Databricks managed credentials, step through `databricks/databricks_examples.R`. The Databricks ODBC driver must be installed on the server; check with `odbc::odbcListDrivers()`.
+3. To switch the dashboard and reports to Databricks, add `CI_DATA_SOURCE=databricks` and `DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/<warehouse-id>` to `.Renviron` and restart R. If Databricks can't be reached, they fall back to the local database. The dashboard sidebar shows which source is in use.
 
 No Databricks R cluster is needed. R runs on Posit Workbench or Connect, and `dplyr` code is translated to SQL that runs in the Databricks SQL warehouse.
 

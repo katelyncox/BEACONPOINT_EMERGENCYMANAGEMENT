@@ -56,26 +56,38 @@ ensure_data <- function() {
   invisible(DB_PATH())
 }
 
-# Load completed responses from the surveydown survey (survey/local_data.csv)
-# into the program database. surveydown stores the option *values* from
-# survey.qmd (e.g. "pacific_rim"), so they are mapped back to display labels.
+# --- Data source -----------------------------------------------------------
+# The local SQLite database is the default. To read the same tables from
+# Databricks (Workbench managed credentials, no tokens in code), add to
+# .Renviron and restart R:
+#   CI_DATA_SOURCE=databricks
+#   DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/<warehouse-id>
+# If Databricks can't be reached, the local database is used instead so the
+# demo keeps running. See databricks/databricks_examples.R.
+
+DATABRICKS_SCHEMA <- "sol_eng_demo_nickp.beacon_point_ci"
+
+use_databricks <- function() tolower(Sys.getenv("CI_DATA_SOURCE")) == "databricks"
+
+# Completed responses from the surveydown survey (survey/local_data.csv).
+# surveydown stores the option *values* from survey.qmd (e.g. "pacific_rim"),
+# so they are mapped back to display labels.
 #
 # With surveydown in `mode: database`, responses are already in Postgres and
 # this step becomes a simple query of that table.
-sync_survey_responses <- function(con, survey_csv = ci_path("survey", "local_data.csv")) {
-  dbExecute(con, "DELETE FROM survey_responses WHERE source = 'Live survey'")
+read_live_responses <- function(survey_csv = ci_path("survey", "local_data.csv")) {
   if (!file.exists(survey_csv)) {
-    return(invisible(0L))
+    return(NULL)
   }
 
   live <- read_csv(survey_csv, col_types = cols(.default = col_character()))
   if (!"score_overall" %in% names(live)) {
-    return(invisible(0L))
+    return(NULL)
   }
 
   to_label <- function(x) tools::toTitleCase(gsub("_", " ", x))
 
-  live <- live |>
+  live |>
     filter(!is.na(score_overall), score_overall != "") |>
     transmute(
       response_id = paste0("LIVE-", substr(session_id, 1, 8)),
@@ -91,35 +103,82 @@ sync_survey_responses <- function(con, survey_csv = ci_path("survey", "local_dat
       comment = na_if(comment, ""),
       source = "Live survey"
     )
+}
 
-  if (nrow(live) > 0) dbAppendTable(con, "survey_responses", live)
+# Load live survey responses into the local program database.
+sync_survey_responses <- function(con, survey_csv = ci_path("survey", "local_data.csv")) {
+  dbExecute(con, "DELETE FROM survey_responses WHERE source = 'Live survey'")
+  live <- read_live_responses(survey_csv)
+  if (is.null(live) || nrow(live) == 0) {
+    return(invisible(0L))
+  }
+  dbAppendTable(con, "survey_responses", live)
   invisible(nrow(live))
 }
 
-# One call that every product uses to get analysis-ready tables.
-load_ci_data <- function(sync_live = TRUE) {
+read_local_tables <- function(sync_live) {
   ensure_data()
   con <- dbConnect(RSQLite::SQLite(), DB_PATH())
   on.exit(dbDisconnect(con))
 
-  # To read from Databricks instead, swap the connection above for
-  #   con <- DBI::dbConnect(odbc::databricks(), httpPath = "<warehouse-http-path>")
-  # and point the table names at the catalog, e.g.
-  #   dplyr::tbl(con, I("sol_eng_demo_nickp.beacon_point_ci.survey_responses"))
-  # See databricks/databricks_examples.R.
-
   if (sync_live) sync_survey_responses(con)
 
   list(
-    responses = dbReadTable(con, "survey_responses") |>
+    responses = dbReadTable(con, "survey_responses"),
+    incidents = dbReadTable(con, "incidents"),
+    aar = dbReadTable(con, "aar_observations")
+  )
+}
+
+# Databricks applies its row filter to whoever is signed in, so a restricted
+# user gets fewer rows with no filtering code in R. On Connect, add a
+# Databricks OAuth integration; connectcreds then signs in as the viewer.
+read_databricks_tables <- function(sync_live) {
+  requireNamespace("connectcreds", quietly = TRUE) # loading it enables viewer credentials
+  con <- dbConnect(odbc::databricks(), httpPath = Sys.getenv("DATABRICKS_HTTP_PATH"))
+  on.exit(dbDisconnect(con))
+
+  read_table <- function(name) dbGetQuery(con, paste0("SELECT * FROM ", DATABRICKS_SCHEMA, ".", name))
+
+  responses <- read_table("survey_responses") |>
+    mutate(submitted_at = as.character(submitted_at), source = "Synthetic history")
+  # Live survey responses stay local; they are added in R, not written back
+  if (sync_live) responses <- bind_rows(responses, read_live_responses())
+
+  list(
+    responses = responses,
+    incidents = read_table("incidents"),
+    aar = read_table("aar_observations")
+  )
+}
+
+# One call that every product uses to get analysis-ready tables.
+load_ci_data <- function(sync_live = TRUE) {
+  data_source <- "Local database"
+  tables <- NULL
+  if (use_databricks()) {
+    tables <- tryCatch(
+      read_databricks_tables(sync_live),
+      error = function(e) {
+        warning("Databricks unavailable, using the local database: ", conditionMessage(e), call. = FALSE)
+        NULL
+      }
+    )
+    if (!is.null(tables)) data_source <- "Databricks"
+  }
+  if (is.null(tables)) tables <- read_local_tables(sync_live)
+
+  list(
+    responses = tables$responses |>
       mutate(
         submitted_at = as.Date(submitted_at),
         quarter = paste0(format(submitted_at, "%Y"), " Q", (as.integer(format(submitted_at, "%m")) - 1) %/% 3 + 1)
       ),
-    incidents = dbReadTable(con, "incidents") |>
+    incidents = tables$incidents |>
       mutate(start_date = as.Date(start_date)),
-    aar = dbReadTable(con, "aar_observations") |>
-      mutate(report_date = as.Date(report_date))
+    aar = tables$aar |>
+      mutate(report_date = as.Date(report_date)),
+    data_source = data_source
   )
 }
 

@@ -41,6 +41,7 @@ integrations/exports/
 survey/local_data.csv
 survey/_survey/
 .env
+.Renviron
 
 # Browser testing
 .playwright-mcp/

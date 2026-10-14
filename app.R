@@ -25,27 +25,11 @@ source("R/ci_data.R")
 source("ml/model_utils.R")
 
 # --- Databricks (optional) --------------------------------------------------
-# With Workbench managed credentials, or a Connect OAuth integration, this app
-# can read straight from Databricks instead of the local database. Viewers see
-# only the rows their own Databricks identity is allowed to see.
-#
-# library(connectcreds)  # picks up the viewer's Connect OAuth credentials
-# library(dbplyr)
-#
-# pool_con <- reactive({
-#   con <- try(pool::dbPool(
-#     odbc::databricks(),
-#     httpPath = Sys.getenv("DATABRICKS_HTTP_PATH")
-#   ))
-#   validate(need(!inherits(con, "try-error"), "Issue connecting to Databricks"))
-#   con
-# })
-#
-# The filtering and averaging below can then run inside Databricks, e.g.
-#   tbl(pool_con(), I("sol_eng_demo_nickp.beacon_point_ci.survey_responses")) |>
-#     filter(region %in% !!input$region) |>
-#     summarise(across(starts_with("score_"), mean)) |>
-#     collect()
+# Set CI_DATA_SOURCE=databricks and DATABRICKS_HTTP_PATH (see R/ci_data.R) to
+# read from Databricks with Workbench managed credentials, or a Connect OAuth
+# integration. Data then loads per session, so viewers see only the rows their
+# own Databricks identity is allowed to see. The local database is the default
+# and the fallback.
 
 if (!file.exists(MODEL_PATH())) source("ml/train_model.R", local = new.env())
 model <- readRDS(MODEL_PATH())
@@ -162,7 +146,7 @@ ui <- page_navbar(
 # --- Server ----------------------------------------------------------------
 
 server <- function(input, output, session) {
-  ci <- reactiveVal(initial)
+  ci <- reactiveVal(if (use_databricks()) load_ci_data() else initial)
 
   # Pull in any responses submitted through the surveydown survey since the
   # app started. This is the "survey -> database -> app" step of the demo.
@@ -173,7 +157,7 @@ server <- function(input, output, session) {
 
   output$live_count <- renderText({
     n <- sum(ci()$responses$source == "Live survey")
-    paste0(n, " response", if (n != 1) "s", " from the live survey")
+    paste0(n, " response", if (n != 1) "s", " from the live survey. Data: ", ci()$data_source)
   })
 
   filtered <- reactive({
